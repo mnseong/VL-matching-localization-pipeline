@@ -11,12 +11,13 @@ git clone https://github.com/mnseong/VL-matching-localization-pipeline.git
 Please refer to our directory structure
 ```
 VL-matching-localization-pipeline
-    ├─ my_dataset
-    │   ├─ global_features
-    │   ├─ local_features
-    │   ├─ mapping
-    │   ├─ query
-    │   └─ map_plus_query # kapture_merge.py with mapping/query inputs
+    ├─ datasets
+    │   └─my_dataset
+    │      ├─ global_features
+    │      ├─ local_features
+    │      ├─ mapping
+    │      ├─ query
+    │      └─ map_plus_query # kapture_merge.py with mapping/query inputs
     ├─ mapping
     │   ├─ kapture_pipeline_mapping.py
     │   └─ pipeline_import_paths.py
