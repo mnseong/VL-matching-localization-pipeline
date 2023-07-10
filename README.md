@@ -69,3 +69,8 @@ colmap gui \
     --image_path query/sensors/records_data \
     --import_path ./colmap-localization/r2d2_500/AP-GeM-LM18_top5/AP-GeM-LM18_top5/colmap_localized/reconstruction/
 ```
+<br/>
+
+### 5. References
+>[Benchmarking Image Retrieval for Visual Localization](https://arxiv.org/abs/2011.11946) (*3DV* *24* *Nov* *2020*)\
+>[Robust Image Retrieval-based Visual Localization using Kapture](https://arxiv.org/abs/2007.13867) (*arXiv* *27* *Jul* *2020*)
