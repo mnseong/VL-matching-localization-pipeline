@@ -20,27 +20,26 @@ for SCENE in B1 B2; do
   # 1) Create temporal mapping and query sets (they will be modified)
   mkdir -p ${WORKING_DIR}/${DATASET}/mapping/sensors
   cp -rf ${DATASETS_PATH}/${DATASET}/mapping/sensors/*.txt ${WORKING_DIR}/${DATASET}/mapping/sensors/
-  echo 1
   ln -s ${DATASETS_PATH}/${DATASET}/mapping/sensors/records_data ${WORKING_DIR}/${DATASET}/mapping/sensors/records_data
 
   mkdir -p ${WORKING_DIR}/${DATASET}/test/sensors
   cp -rf ${DATASETS_PATH}/${DATASET}/test/sensors/*.txt ${WORKING_DIR}/${DATASET}/test/sensors/
   ln -s ${DATASETS_PATH}/${DATASET}/test/sensors/records_data ${WORKING_DIR}/${DATASET}/test/sensors/records_data
-
+  echo 11111111111111111111
   # 2) Merge mapping and test kaptures (this will make it easier to extract the local and global features and it will be used for the localization step)
   kapture_merge.py -v debug -f \
     -i ${WORKING_DIR}/${DATASET}/mapping ${WORKING_DIR}/${DATASET}/test \
     -o ${WORKING_DIR}/${DATASET}/map_plus_test \
     --image_transfer link_relative
-
+  echo 2222222222222222222
   # 3) Extract global features (we will use AP-GeM here)
   cd $ROOT_DIR/deep-image-retrieval
   python -m dirtorch.extract_kapture --kapture-root ${WORKING_DIR}/${DATASET}/map_plus_test/ --checkpoint dirtorch/models/Resnet101-AP-GeM-LM18.pt --gpu 0
-  
+  echo 2525252525252525252525
   mkdir -p ${WORKING_DIR}/${DATASET}/global_features/Resnet101-AP-GeM-LM18/global_features
   mv ${WORKING_DIR}/${DATASET}/map_plus_test/reconstruction/global_features/Resnet101-AP-GeM-LM18/* ${WORKING_DIR}/${DATASET}/global_features/Resnet101-AP-GeM-LM18/global_features/
   rm -rf ${WORKING_DIR}/${DATASET}/map_plus_test/reconstruction/global_features/Resnet101-AP-GeM-LM18
-    
+  echo 333333333333
   # 5) Extract local features (we will use R2D2 here)
   cd $ROOT_DIR/r2d2
   python extract_kapture.py --model models/r2d2_WASF_N8_big.pt --kapture-root ${WORKING_DIR}/${DATASET}/map_plus_test/ --min-scale 0.3 --min-size 128 --max-size 9999 --top-k ${KPTS}
