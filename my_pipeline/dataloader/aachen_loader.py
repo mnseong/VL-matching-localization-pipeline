@@ -7,21 +7,23 @@ from path import Path
 import cv2
 import torch.nn.functional as F
 
-configs = {
-    'data_path':/mnt/hdd4T/minseong/github/VL-matching-localization-pipeline/datasets/Aachen-Day-Night-v1.1/,
-}
+# configs = {
+#     'data_path':/mnt/hdd4T/minseong/github/VL-matching-localization-pipeline/datasets/Aachen-Day-Night-v1.1/,
+# }
+
+data_path = "/mnt/hdd4T/minseong/github/VL-matching-localization-pipeline/datasets/Aachen-Day-Night-v1.1/"
 
 class Aachen_Day_Night(Dataset):
-    def __init__(self, configs):
+    def __init__(self):
         super(Aachen_Day_Night, self).__init__()
-        self.configs = configs
+        self.path = data_path
         self.transform = transforms.Compose([transforms.ToTensor(),
                                              transforms.Normalize(mean=(0.485, 0.456, 0.406),
                                                                   std=(0.229, 0.224, 0.225)),
                                              ])
         self.sift = cv2.xfeatures2d.SIFT_create()
 
-        imdir       = Path(self.configs['data_path'])
+        imdir       = Path(self.path)
         dbimgs      = imdir.glob('mapping/sensors/records_data/db/*.jpg')
         queryimgs   = imdir.glob('query/*/*/*/*/*/*.jpg')
         sequences1  = imdir.glob('mapping/sensors/records_data/sequences/gopro3_undistorted/*.png')
