@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from backbone import ResUNet_F2R
 
 class PositionwiseNorm2(nn.Module):
     def __init__(self, epsilon=1e-5):
