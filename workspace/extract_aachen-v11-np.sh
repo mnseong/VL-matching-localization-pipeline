@@ -33,11 +33,11 @@ KPTS=20000 # number of local features to extract
 
 # 4) Extract global features (we will use AP-GeM here)
 cd $ROOT_DIR/deep-image-retrieval
-python -m dirtorch.extract_kapture --kapture-root ${WORK_PATH}/map_plus_query/ --checkpoint dirtorch/models/Resnet101-AP-GeM-LM18.pt --gpu 0
+python -m dirtorch.extract_kapture-np --kapture-root ${WORK_PATH}/map_plus_query/ --checkpoint dirtorch/models/Resnet101-AP-GeM-LM18.pt --gpu 0
 
 # move to right location
-mkdir -p ${WORK_PATH}/global_features/Resnet101-AP-GeM-LM18/global_features
-mv ${WORK_PATH}/map_plus_query/reconstruction/global_features/Resnet101-AP-GeM-LM18/* ${WORK_PATH}/global_features/Resnet101-AP-GeM-LM18/global_features/
+mkdir -p ${WORK_PATH}/global_features_my/Resnet101-AP-GeM-LM18/global_features
+mv ${WORK_PATH}/map_plus_query/reconstruction/global_features/Resnet101-AP-GeM-LM18/* ${WORK_PATH}/global_features_my/Resnet101-AP-GeM-LM18/global_features/
 rm -rf ${WORK_PATH}/map_plus_query/reconstruction/global_features/Resnet101-AP-GeM-LM18
 
 # 5) Extract local features (we will use R2D2 here)
@@ -45,7 +45,7 @@ cd $ROOT_DIR/r2d2
 python extract_kapture.py --model models/r2d2_WASF_N8_big.pt --kapture-root ${WORK_PATH}/map_plus_query/ --min-scale 0.3 --min-size 128 --max-size 9999 --top-k 20000
 
 # move to right location
-mkdir -p ${WORK_PATH}/local_features/r2d2_WASF_N8_big/descriptors
-mv ${WORK_PATH}/map_plus_query/reconstruction/descriptors/r2d2_WASF_N8_big/* ${WORK_PATH}/local_features/r2d2_WASF_N8_big/descriptors/
-mkdir -p ${WORK_PATH}/local_features/r2d2_WASF_N8_big/keypoints
-mv ${WORK_PATH}/map_plus_query/reconstruction/keypoints/r2d2_WASF_N8_big/* ${WORK_PATH}/local_features/r2d2_WASF_N8_big/keypoints/
+mkdir -p ${WORK_PATH}/local_features_my/r2d2_WASF_N8_big/descriptors
+mv ${WORK_PATH}/map_plus_query/reconstruction/descriptors/r2d2_WASF_N8_big/* ${WORK_PATH}/local_features_my/r2d2_WASF_N8_big/descriptors/
+mkdir -p ${WORK_PATH}/local_features_my/r2d2_WASF_N8_big/keypoints
+mv ${WORK_PATH}/map_plus_query/reconstruction/keypoints/r2d2_WASF_N8_big/* ${WORK_PATH}/local_features_my/r2d2_WASF_N8_big/keypoints/
