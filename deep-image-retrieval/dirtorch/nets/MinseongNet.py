@@ -1,14 +1,25 @@
 import torch
+import numpy as np
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
+import skimage.io as io
+from path import Path
+import cv2
+import matplotlib.pyplot as plt
+import importlib
 import torch.nn as nn
 import torch.nn.functional as F
-import importlib
+from torchsummary import summary
 
+transform = transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize(mean=(0.485, 0.456, 0.406),
+                                                     std=(0.229, 0.224, 0.225)),
+                                ])
 
 def class_for_name(module_name, class_name):
     # load the module, will raise ImportError if module cannot be loaded
     m = importlib.import_module(module_name)
     return getattr(m, class_name)
-
 
 class conv(nn.Module):
     def __init__(self, num_in_layers, num_out_layers, kernel_size, stride):
@@ -145,23 +156,73 @@ class ChannelwiseNorm(nn.Module):
         return result
 
 
-class ResUNet_F2R(nn.Module):
-    """
-    F2R-Backbone: Feature-Fusion-ResUNet Backbone
-    """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class ChannelAttention(nn.Module):
+    def __init__(self, in_channels, reduction_ratio=16):
+        super(ChannelAttention, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.fc1 = nn.Conv2d(in_channels, in_channels // reduction_ratio, kernel_size=1, stride=1, padding=0)
+        self.fc2 = nn.Conv2d(in_channels // reduction_ratio, in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, x):
+        avg_out = self.fc2(self.fc1(self.avg_pool(x)))
+        max_out = self.fc2(self.fc1(self.max_pool(x)))
+        out = avg_out + max_out
+        return torch.sigmoid(out)
+
+
+class SpatialAttention(nn.Module):
+    def __init__(self):
+        super(SpatialAttention, self).__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size=7, stride=1, padding=3)
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        out = torch.cat([avg_out, max_out], dim=1)
+        out = self.conv(out)
+        return torch.sigmoid(out)
+
+
+class CBAM(nn.Module):
+    def __init__(self, in_channels, reduction_ratio=16):
+        super(CBAM, self).__init__()
+        self.channel_attention = ChannelAttention(in_channels, reduction_ratio)
+        self.spatial_attention = SpatialAttention()
+
+    def forward(self, x):
+        out = self.channel_attention(x) * x
+        out = self.spatial_attention(out) * out
+        return out
+
+# Test the implementation
+if __name__ == "__main__":
+    # Assuming input channel is 64
+    input_tensor = torch.randn(1, 128, 264, 400)
+    cbam_module = CBAM(in_channels=128)
+    output = cbam_module(input_tensor)
+    print("Output shape:", output.shape)
+
+
+class MinseongNet(nn.Module):
     def __init__(self,
                  encoder='resnet50',
                  pretrained=True,
                  fusion_out_ch=128
                  ):
 
-        super(ResUNet_F2R, self).__init__()
+        super(MinseongNet, self).__init__()
         assert encoder in ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152'], "Incorrect encoder type"
         if encoder in ['resnet18', 'resnet34']:
             filters = [64, 128, 256, 512]
         else:
             filters = [256, 512, 1024, 2048]
         resnet = class_for_name("torchvision.models", encoder)(pretrained=pretrained)
+        resnet_152 = class_for_name("torchvision.models", 'resnet152')(pretrained=pretrained)
 
         self.firstconv      = resnet.conv1  # H/2
         self.firstbn        = resnet.bn1
@@ -179,7 +240,18 @@ class ResUNet_F2R(nn.Module):
         self.upconv2    = upconv(512, 256, 3, 2)
         self.iconv2     = conv(filters[0] + 256, 256, 3, 1)
 
-	    # Feature Fusion Block
+        # 152_Encoder
+        self.layer152_1 = resnet_152.layer1  # H/4
+        self.layer152_2 = resnet_152.layer2  # H/8
+        self.layer152_3 = resnet_152.layer3  # H/16
+
+        # 152_Decoder
+        self.upconv152_3    = upconv(filters[2], 512, 3, 2)
+        self.iconv152_3     = conv(filters[1] + 512, 512, 3, 1)
+        self.upconv152_2    = upconv(512, 256, 3, 2)
+        self.iconv152_2     = conv(filters[0] + 256, 256, 3, 1)
+
+        # Feature Fusion Block
         self.side3          = upconv_like(1024, fusion_out_ch, 3)
         self.side2          = upconv_like(512, fusion_out_ch, 3)
         self.side1          = conv(256, fusion_out_ch, 1, 1)
@@ -195,9 +267,20 @@ class ResUNet_F2R(nn.Module):
 
         self.out_channels = 192
 
+        self.conv1 = nn.Conv2d(128, 128, 3, 1, 1)
+        self.conv2 = nn.Conv2d(256, 128, 3, 1, 1)
+        self.conv3 = nn.Conv2d(128, 1, 1, 1, 0)
+
+        self.norm1 = nn.InstanceNorm2d(128)
+        self.norm2 = nn.InstanceNorm2d(128)
+        self.norm3 = nn.InstanceNorm2d(1)
+        self.relu  = nn.PReLU()
+
+        self.cbam = CBAM(in_channels=128)
+
     def name(self):
-        return 'ResUNet_F2R'
-        
+        return 'MinseongNet'
+
     def skipconnect(self, x1, x2):
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
@@ -208,38 +291,101 @@ class ResUNet_F2R(nn.Module):
         x = torch.cat([x2, x1], dim=1)
         return x
 
-    def forward(self, x):
+    def peakiness_score(self, x, ksize=3, dilation=1):
+        # [b, c, h, w] the feature maps
+        # [b, 1, h, w] the peakiness score map
+        b,c,h,w = x.shape
+        max_per_sample = torch.max(x.view(b,-1), dim=1)[0]
+        x = x / max_per_sample.view(b,1,1,1)
 
-        # Encoder
+        pad_inputs = F.pad(x, [dilation]*4, mode='reflect')
+        avg_inputs = F.avg_pool2d(pad_inputs, ksize, stride=1)
+
+        alpha   = F.softplus(x - avg_inputs)
+        beta    = F.softplus(x - x.mean(1, True))
+
+        score_vol = alpha * beta
+        score_map = score_vol.max(1,True)[0]
+
+        return score_map
+
+    def forward(self, x):
         x       = self.firstrelu(self.firstbn(self.firstconv(x)))
         x_first = self.firstmaxpool(x)
-        
+
+        # First Encoder Pipe
         x1 = self.layer1(x_first)
         x2 = self.layer2(x1)
         x3 = self.layer3(x2)
 
-        # Decoder
-        x   = self.upconv3(x3)
-        x   = self.skipconnect(x2, x)
-        x2d = self.iconv3(x)
+        # Second Encoder Pipe
+        y1 = self.layer152_1(x_first)
+        y2 = self.layer152_2(y1)
+        y3 = self.layer152_3(y2)
 
-        x = self.upconv2(x2d)
-        x = self.skipconnect(x1, x)
-        x = self.iconv2(x)
+        print("이건 x3")
+        print(x3.shape)
+        print("이건 y3")
+        print(y3.shape)
+
+        # First Decoder Pipe
+        up_x3   = self.upconv152_3(x3)
+        y   = self.skipconnect(y2, up_x3)
+        y2d = self.iconv152_3(y)
+        up_y2d = self.upconv152_2(y2d)
+        x = self.skipconnect(x1, up_y2d)
+
+        a = self.iconv152_2(x)
+
+        # Second Decoder Pipe
+        up_y3   = self.upconv152_3(y3)
+        x   = self.skipconnect(x2, up_y3)
+        x2d = self.iconv152_3(x)
+        up_x2d = self.upconv152_2(x2d)
+        y = self.skipconnect(y1, up_x2d)
+
+        b = self.iconv152_2(y)
+
+        # Fit into proper form
+        a_d1          = self.side1(a)
+        b_d1          = self.side1(b)
+        a_d2          = self.side2(y2d, a_d1)
+        b_d2          = self.side2(x2d, b_d1)
+        a_d3          = self.side3(x3, a_d1)
+        b_d3          = self.side3(y3, b_d1)
 
         # Feature Fusion output
-        d1          = self.side1(x)
-        d2          = self.side2(x2d, d1)
-        d3          = self.side3(x3, d1)
-        x_fusion    = self.fusion_conv(torch.cat((d1,d2,d3),1))  # H/4
-        
-        del x, x2, d1, d2, d3, x2d
+        a_fusion      = self.fusion_conv(torch.cat((a_d1,a_d2,a_d3),1))  # H/4
+        b_fusion      = self.fusion_conv(torch.cat((b_d1,b_d2,b_d3),1))  # H/4
 
         # Shared Coupling-bridge Normalization
-        desc1       = self.fusion_pn(x_fusion)
-        desc2       = self.fusion_cn(x_fusion)
-        x_fusion_cn = desc1 * (self.fuse_weight_fusion_1/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2)) + \
-            desc2 * (self.fuse_weight_fusion_2/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2))
+        desc1       = self.fusion_pn(a_fusion)
+        desc2       = self.fusion_cn(a_fusion)
+        a_fusion_cn = desc1 * (self.fuse_weight_fusion_1/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2)) + \
+                      desc2 * (self.fuse_weight_fusion_2/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2))
 
-        return x_fusion_cn
+        desc3       = self.fusion_pn(b_fusion)
+        desc4       = self.fusion_cn(b_fusion)
+        b_fusion_cn = desc3 * (self.fuse_weight_fusion_1/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2)) + \
+                      desc4 * (self.fuse_weight_fusion_2/(self.fuse_weight_fusion_1+self.fuse_weight_fusion_2))
+
+        # Measure peakiness score a
+        a_pf = self.peakiness_score(a_fusion_cn)
+        a_mps = self.relu(self.norm1(self.conv1(a_pf*a_fusion_cn)))
+
+        # CBAM b
+        b_cbam = self.cbam(b_fusion_cn)
+
+        final = torch.cat([a_mps, b_cbam], dim=1)
+        final = self.relu(self.norm2(self.conv2(final)))
+        final = F.softplus(self.norm3(self.conv3(final)))
+
+        # out = {'a_fusion_cn': a_fusion_cn,
+        #        'b_fusion_cn': b_fusion_cn,
+        #        'final': final
+        #        }
+        return final
+
+
+
 
