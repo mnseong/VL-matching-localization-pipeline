@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
-import skimage.io as io
 from path import Path
 import cv2
 import torch.nn.functional as F
